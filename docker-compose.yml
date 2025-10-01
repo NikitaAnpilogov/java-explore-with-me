@@ -1,14 +1,31 @@
 services:
   stats-server:
+    restart: on-failure
+    build: stat-service/server
+    image: ewm-stats-server
+    container_name: "ewm-stats-server"
     ports:
       - "9090:9090"
+    depends_on:
+      - stats-db
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://stats-db:5432/stats
+      - POSTGRES_USER=owner
+      - POSTGRES_PASSWORD=password
+      - DB_NAME=stats
+      - SPRING_DATASOURCE_USERNAME=owner
+      - SPRING_DATASOURCE_PASSWORD=password
+      - DB_HOST=stats-db
+      - DB_PORT=6541
 
   stats-db:
     image: postgres:16.1
-
-  ewm-service:
+    container_name: "stats-db"
     ports:
-      - "8080:8080"
-
-  ewm-db:
-    image: postgres:16.1
+      - "6541:5432"
+    volumes:
+      - /var/lib/postgresql/stats-service
+    environment:
+      - POSTGRES_DB=stats
+      - POSTGRES_USER=owner
+      - POSTGRES_PASSWORD=password
