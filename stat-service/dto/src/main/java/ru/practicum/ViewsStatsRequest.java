@@ -14,6 +14,6 @@ public class ViewsStatsRequest {
     private List<String> uri;
     private LocalDateTime start;
     private LocalDateTime end;
-    private boolean unique;
+    private Boolean unique;
     private String application;
 }

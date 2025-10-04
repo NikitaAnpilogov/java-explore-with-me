@@ -17,6 +17,12 @@ services:
       - SPRING_DATASOURCE_PASSWORD=password
       - DB_HOST=stats-db
       - DB_PORT=6541
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:9090/actuator/health || exit 1
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
 
   stats-db:
     image: postgres:16.1
@@ -29,3 +35,53 @@ services:
       - POSTGRES_DB=stats
       - POSTGRES_USER=owner
       - POSTGRES_PASSWORD=password
+    healthcheck:
+      test: pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+
+  main-service:
+    restart: on-failure
+    build: main-service
+    image: main-service
+    container_name: "ewm-main-service"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - main-db
+      - stats-server
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://main-db:5432/main_db
+      - POSTGRES_USER=owner
+      - POSTGRES_PASSWORD=password
+      - DB_NAME=main_db
+      - SPRING_DATASOURCE_USERNAME=owner
+      - SPRING_DATASOURCE_PASSWORD=password
+      - DB_HOST=main-db
+      - DB_PORT=6542
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
+  main-db:
+    image: postgres:16.1
+    container_name: "main-db"
+    ports:
+      - "6542:5432"
+    volumes:
+      - /var/lib/postgresql/main-service
+    environment:
+      - POSTGRES_DB=main_db
+      - POSTGRES_USER=owner
+      - POSTGRES_PASSWORD=password
+    healthcheck:
+      test: pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5

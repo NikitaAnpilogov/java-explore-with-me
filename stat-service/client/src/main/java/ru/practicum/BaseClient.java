@@ -26,13 +26,31 @@ public class BaseClient {
 
     private <T> ResponseEntity<Object> makeAndSendRequest(HttpMethod method, String path, @Nullable Map<String, Object> parameters, @Nullable T body) {
         HttpEntity<T> requestEntity = new HttpEntity<>(body, defaultHeaders());
-
+        ResponseEntity<Object> serverResponse;
         try {
-            assert parameters != null;
-            return restTemplate.exchange(path, method, requestEntity, Object.class, parameters);
+            if (parameters != null) {
+                serverResponse = restTemplate.exchange(path, method, requestEntity, Object.class, parameters);
+            } else {
+                serverResponse = restTemplate.exchange(path, method, requestEntity, Object.class);
+            }
         } catch (HttpStatusCodeException e) {
             return ResponseEntity.status(e.getStatusCode()).body(e.getResponseBodyAsByteArray());
         }
+        return prepareGatewayResponse(serverResponse);
+    }
+
+    private static ResponseEntity<Object> prepareGatewayResponse(ResponseEntity<Object> response) {
+        if (response.getStatusCode().is2xxSuccessful()) {
+            return response;
+        }
+
+        ResponseEntity.BodyBuilder responseBuilder = ResponseEntity.status(response.getStatusCode());
+
+        if (response.hasBody()) {
+            return responseBuilder.body(response.getBody());
+        }
+
+        return responseBuilder.build();
     }
 
     private HttpHeaders defaultHeaders() {
