@@ -22,6 +22,7 @@ import ru.practicum.exceptions.CorrelationException;
 import ru.practicum.exceptions.IncorrectParametersException;
 import ru.practicum.exceptions.NotFoundException;
 import ru.practicum.mapper.EventMapper;
+import ru.practicum.mapper.EventUpdateMapper;
 import ru.practicum.mapper.LocationMapper;
 import ru.practicum.mapper.RequestMapper;
 import ru.practicum.model.*;
@@ -49,8 +50,8 @@ public class EventServiceImpl implements EventService {
     private final ObjectMapper viewStatsMapper;
 
 
-    private static final ConflictException MAX_LIMIT_CONFLICT_EXCEPTION = new ConflictException("Событие не обновлено.",
-            "Лимит участников исчерпан.");
+    //private static final ConflictException MAX_LIMIT_CONFLICT_EXCEPTION = new ConflictException("Событие не обновлено.",
+            //"Лимит участников исчерпан.");
 
 
     @Override
@@ -193,7 +194,7 @@ public class EventServiceImpl implements EventService {
         checkUser(userId);
         Event oldEvent = checkEvenByInitiatorAndEventId(userId, eventId);
         if (oldEvent.getEventStatus().equals(EventStatus.PUBLISHED)) {
-            throw MAX_LIMIT_CONFLICT_EXCEPTION;
+            throw new ConflictException("Событие не обновлено.", "Лимит участников исчерпан.");
         }
         if (!oldEvent.getInitiator().getId().equals(userId)) {
             throw new ConflictException("Событие не обновлено.", "Пользователь с id= " + userId + " не автор события");
@@ -256,7 +257,7 @@ public class EventServiceImpl implements EventService {
         switch (status) {
             case CONFIRMED:
                 if (event.getParticipantLimit() == confirmedRequestsCount) {
-                    throw MAX_LIMIT_CONFLICT_EXCEPTION;
+                    throw new ConflictException("Событие не обновлено.", "Лимит участников исчерпан.");
                 }
                 UpdatedStatusDto updatedStatusConfirmed = updatedStatusConfirmed(event,
                         UpdatedStatusDto.builder()
@@ -280,7 +281,7 @@ public class EventServiceImpl implements EventService {
                         .build();
             case REJECTED:
                 if (event.getParticipantLimit() == confirmedRequestsCount) {
-                    throw MAX_LIMIT_CONFLICT_EXCEPTION;
+                    throw new ConflictException("Событие не обновлено.", "Лимит участников исчерпан.");
                 }
 
                 final UpdatedStatusDto updatedStatusReject = updatedStatusConfirmed(event,
@@ -309,12 +310,50 @@ public class EventServiceImpl implements EventService {
         }
 
         addStatsClient(request);
-        Pageable pageable = PageRequest.of(searchEventParams.getFrom() / searchEventParams.getSize(), searchEventParams.getSize());
 
+        Pageable pageable = createPageableWithSort(searchEventParams);
+
+        Specification<Event> specification = buildEventSpecification(searchEventParams);
+        List<Event> resultEvents = eventRepository.findAll(specification, pageable).getContent();
+
+        List<EventShortDto> result = resultEvents
+                .stream().map(EventMapper::mapToShort).collect(Collectors.toList());
+        Map<Long, Long> viewStatsMap = getViewsAllEvents(resultEvents);
+
+        for (EventShortDto event : result) {
+            Long viewsFromMap = viewStatsMap.getOrDefault(event.getId(), 0L);
+            event.setViews(viewsFromMap);
+        }
+
+        return result;
+    }
+
+    private Pageable createPageableWithSort(SearchEventParams searchEventParams) {
+        int from = searchEventParams.getFrom() != null ? searchEventParams.getFrom() : 0;
+        int size = searchEventParams.getSize() != null ? searchEventParams.getSize() : 10;
+
+        if (searchEventParams.getSort() != null) {
+            Sort sort = createSort(searchEventParams.getSort());
+            return PageRequest.of(from / size, size, sort);
+        }
+
+        return PageRequest.of(from / size, size);
+    }
+
+    private Sort createSort(String sortParam) {
+        if ("EVENT_DATE".equalsIgnoreCase(sortParam)) {
+            return Sort.by(Sort.Direction.ASC, "eventDate");
+        } else if ("VIEWS".equalsIgnoreCase(sortParam)) {
+            return Sort.by(Sort.Direction.DESC, "views");
+        }
+        return Sort.by(Sort.Direction.ASC, "eventDate");
+    }
+
+    private Specification<Event> buildEventSpecification(SearchEventParams searchEventParams) {
         Specification<Event> specification = Specification.where(null);
         LocalDateTime now = LocalDateTime.now();
 
-        if (searchEventParams.getText() != null) {
+        if (searchEventParams.getText() != null && !searchEventParams.getText().isBlank()) {
             String searchText = searchEventParams.getText().toLowerCase();
             specification = specification.and((root, query, criteriaBuilder) ->
                     criteriaBuilder.or(
@@ -328,6 +367,11 @@ public class EventServiceImpl implements EventService {
                     root.get("category").get("id").in(searchEventParams.getCategories()));
         }
 
+        if (searchEventParams.getPaid() != null) {
+            specification = specification.and((root, query, criteriaBuilder) ->
+                    criteriaBuilder.equal(root.get("paid"), searchEventParams.getPaid()));
+        }
+
         LocalDateTime startDateTime = Objects.requireNonNullElse(searchEventParams.getRangeStart(), now);
         specification = specification.and((root, query, criteriaBuilder) ->
                 criteriaBuilder.greaterThan(root.get("eventDate"), startDateTime));
@@ -335,29 +379,26 @@ public class EventServiceImpl implements EventService {
         if (searchEventParams.getRangeEnd() != null) {
             specification = specification.and((root, query, criteriaBuilder) ->
                     criteriaBuilder.lessThan(root.get("eventDate"), searchEventParams.getRangeEnd()));
-        } else
+        } else {
             specification = specification.and((root, query, criteriaBuilder) ->
                     criteriaBuilder.greaterThan(root.get("eventDate"), now));
+        }
 
-        if (searchEventParams.getOnlyAvailable() != null) {
+        if (searchEventParams.getOnlyAvailable() != null && searchEventParams.getOnlyAvailable()) {
             specification = specification.and((root, query, criteriaBuilder) ->
-                    criteriaBuilder.greaterThanOrEqualTo(root.get("participantLimit"), 0));
+                    criteriaBuilder.or(
+                            criteriaBuilder.equal(root.get("participantLimit"), 0),
+                            criteriaBuilder.greaterThan(
+                                    root.get("participantLimit"),
+                                    root.get("confirmedRequests")
+                            )
+                    ));
         }
 
         specification = specification.and((root, query, criteriaBuilder) ->
                 criteriaBuilder.equal(root.get("eventStatus"), EventStatus.PUBLISHED));
 
-        List<Event> resultEvents = eventRepository.findAll(specification, pageable).getContent();
-        List<EventShortDto> result = resultEvents
-                .stream().map(EventMapper::mapToShort).collect(Collectors.toList());
-        Map<Long, Long> viewStatsMap = getViewsAllEvents(resultEvents);
-
-        for (EventShortDto event : result) {
-            Long viewsFromMap = viewStatsMap.getOrDefault(event.getId(), 0L);
-            event.setViews(viewsFromMap);
-        }
-
-        return result;
+        return specification;
     }
 
     @Override
@@ -441,50 +482,15 @@ public class EventServiceImpl implements EventService {
     }
 
     private Event universalUpdate(Event oldEvent, UpdateEventRequest updateEvent) {
-        boolean hasChanges = false;
-        String gotAnnotation = updateEvent.getAnnotation();
-        if (gotAnnotation != null && !gotAnnotation.isBlank()) {
-            oldEvent.setAnnotation(gotAnnotation);
-            hasChanges = true;
-        }
-        Long gotCategory = updateEvent.getCategory();
-        if (gotCategory != null) {
-            Category category = checkCategory(gotCategory);
+        if (updateEvent == null) return oldEvent;
+
+        EventUpdateMapper.updateEventFromRequest(oldEvent, updateEvent);
+
+        if (updateEvent.getCategory() != null) {
+            Category category = checkCategory(updateEvent.getCategory());
             oldEvent.setCategory(category);
-            hasChanges = true;
         }
-        String gotDescription = updateEvent.getDescription();
-        if (gotDescription != null && !gotDescription.isBlank()) {
-            oldEvent.setDescription(gotDescription);
-            hasChanges = true;
-        }
-        if (updateEvent.getLocation() != null) {
-            Location location = updateEvent.getLocation();
-            oldEvent.setLocation(location);
-            hasChanges = true;
-        }
-        Integer gotParticipantLimit = updateEvent.getParticipantLimit();
-        if (gotParticipantLimit != null) {
-            oldEvent.setParticipantLimit(gotParticipantLimit);
-            hasChanges = true;
-        }
-        if (updateEvent.getPaid() != null) {
-            oldEvent.setPaid(updateEvent.getPaid());
-            hasChanges = true;
-        }
-        Boolean requestModeration = updateEvent.getRequestModeration();
-        if (requestModeration != null) {
-            oldEvent.setRequestModeration(requestModeration);
-            hasChanges = true;
-        }
-        String gotTitle = updateEvent.getTitle();
-        if (gotTitle != null && !gotTitle.isBlank()) {
-            oldEvent.setTitle(gotTitle);
-            hasChanges = true;
-        }
-        if (!hasChanges) {
-            oldEvent = null;
-        }
+
         return oldEvent;
     }
 
