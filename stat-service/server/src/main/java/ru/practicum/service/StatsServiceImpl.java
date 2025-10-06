@@ -22,13 +22,16 @@ public class StatsServiceImpl implements StatsService {
 
     @Override
     public List<ViewStats> getViewStatsList(ViewsStatsRequest request) {
-        if (request.getStart().isAfter(request.getEnd()) || request.getStart().isEqual(request.getEnd())) {
-            throw new BadRequestException("Дата старта поиска не может быть больше даты окончания");
+        if (request.getStart() != null && request.getEnd() != null) {
+            if (request.getStart().isAfter(request.getEnd())) {
+                throw new BadRequestException("Дата старта поиска не может быть больше даты окончания");
+            }
         }
-        if (request.isUnique()) {
-            return statRepository.getUniqueStats(request);
+        if (request.getUnique() != null) {
+            if (request.getUnique()) {
+                return statRepository.getUniqueStats(request);
+            }
         }
-
         return statRepository.getStats(request);
     }
 }

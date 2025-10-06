@@ -72,7 +72,7 @@ class StatsControllerTest {
                         .param("start", viewsStatsRequest.getStart().toString())
                         .param("end", viewsStatsRequest.getEnd().toString())
                         .param("uri", String.valueOf(List.of(viewsStatsRequest.getUri())))
-                        .param("unique", String.valueOf(viewsStatsRequest.isUnique()))
+                        .param("unique", String.valueOf(viewsStatsRequest.getUnique()))
                         .param("application", viewsStatsRequest.getApplication()))
                 .andExpect(status().isOk());
 

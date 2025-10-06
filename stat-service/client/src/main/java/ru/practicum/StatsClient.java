@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
+import org.springframework.stereotype.Component;
 import org.springframework.web.util.DefaultUriBuilderFactory;
 
 import java.sql.Timestamp;
@@ -14,27 +15,22 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 
-
+@Component
 public class StatsClient extends BaseClient {
     private static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern(Formatter.DATE_FORMAT);
-
-    @Value("${server.application.name:ewm-main-service}")
     private String applicationName;
 
-    @Value("${server.application.url}")
-    private String serverUrl;
-
-
-    public StatsClient(String serverUrl, RestTemplateBuilder builder) {
+    public StatsClient(@Value("${stats-server.url}") String serverUrl, @Value("${application.name}") String applicationName, RestTemplateBuilder builder) {
         super(
                 builder
                         .uriTemplateHandler(new DefaultUriBuilderFactory(serverUrl))
                         .requestFactory(() -> new HttpComponentsClientHttpRequestFactory())
                         .build()
         );
+        this.applicationName = applicationName;
     }
 
-    public ResponseEntity<Object> saveHit(HttpServletRequest request) {
+    public ResponseEntity<Object> saveStats(HttpServletRequest request) {
         final StatRequest hit = StatRequest.builder()
                 .app(applicationName)
                 .uri(request.getRequestURI())
@@ -44,21 +40,13 @@ public class StatsClient extends BaseClient {
         return post(hit);
     }
 
-    public ResponseEntity<Object> getHit(LocalDateTime start, LocalDateTime end, List<String> uris, Boolean unique) {
-        StringBuilder uriBuilder = new StringBuilder("/stats?start={start}&end={end}");
+    public ResponseEntity<Object> getStats(LocalDateTime start, LocalDateTime end, List<String> uris, Boolean unique) {
         Map<String, Object> parameters = Map.of(
                 "start", start.format(formatter),
-                "end", end.format(formatter)
+                "end", end.format(formatter),
+                "uris", String.join(",", uris),
+                "unique", unique
         );
-
-        if (uris != null) {
-            for (String uri: uris) {
-                parameters.put("uris", uri);
-            }
-        }
-        if (unique) {
-            parameters.put("unique", true);
-        }
-        return get(uriBuilder.toString(), parameters);
+        return get("/stats?start={start}&end={end}&uris={uris}&unique={unique}", parameters);
     }
 }
