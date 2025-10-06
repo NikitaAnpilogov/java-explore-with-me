@@ -49,11 +49,6 @@ public class EventServiceImpl implements EventService {
     private final LocationRepository locationRepository;
     private final ObjectMapper viewStatsMapper;
 
-
-    //private static final ConflictException MAX_LIMIT_CONFLICT_EXCEPTION = new ConflictException("Событие не обновлено.",
-            //"Лимит участников исчерпан.");
-
-
     @Override
     @Transactional(readOnly = true)
     public List<EventFullDto> getAllEventFromAdmin(SearchEventParamsAdmin searchEventParamsAdmin) {
@@ -148,8 +143,10 @@ public class EventServiceImpl implements EventService {
         if (!userRepository.existsById(userId)) {
             throw new NotFoundException("Пользователь не найдее.", "Пользователь с id= " + userId + " не найден");
         }
+
         PageRequest pageRequest = PageRequest.of(from / size, size, org.springframework.data.domain.Sort.by(Sort.Direction.ASC, "id"));
-        return eventRepository.findAll(pageRequest).getContent()
+
+        return eventRepository.findAllByInitiatorId(userId, pageRequest).getContent()
                 .stream().map(EventMapper::mapToShort).collect(Collectors.toList());
     }
 
@@ -316,13 +313,17 @@ public class EventServiceImpl implements EventService {
         Specification<Event> specification = buildEventSpecification(searchEventParams);
         List<Event> resultEvents = eventRepository.findAll(specification, pageable).getContent();
 
-        List<EventShortDto> result = resultEvents
-                .stream().map(EventMapper::mapToShort).collect(Collectors.toList());
         Map<Long, Long> viewStatsMap = getViewsAllEvents(resultEvents);
 
-        for (EventShortDto event : result) {
-            Long viewsFromMap = viewStatsMap.getOrDefault(event.getId(), 0L);
-            event.setViews(viewsFromMap);
+        List<EventShortDto> result = resultEvents
+                .stream().map(event -> {
+                    EventShortDto dto = EventMapper.mapToShort(event);
+                    dto.setViews(viewStatsMap.getOrDefault(event.getId(), 0L));
+                    return dto;
+                }).collect(Collectors.toList());
+
+        if ("VIEWS".equalsIgnoreCase(searchEventParams.getSort())) {
+            result.sort((e1, e2) -> Long.compare(e2.getViews(), e1.getViews())); // DESC порядок
         }
 
         return result;
@@ -332,21 +333,12 @@ public class EventServiceImpl implements EventService {
         int from = searchEventParams.getFrom() != null ? searchEventParams.getFrom() : 0;
         int size = searchEventParams.getSize() != null ? searchEventParams.getSize() : 10;
 
-        if (searchEventParams.getSort() != null) {
-            Sort sort = createSort(searchEventParams.getSort());
+        if (searchEventParams.getSort() != null && "EVENT_DATE".equalsIgnoreCase(searchEventParams.getSort())) {
+            Sort sort = Sort.by(Sort.Direction.ASC, "eventDate");
             return PageRequest.of(from / size, size, sort);
         }
 
         return PageRequest.of(from / size, size);
-    }
-
-    private Sort createSort(String sortParam) {
-        if ("EVENT_DATE".equalsIgnoreCase(sortParam)) {
-            return Sort.by(Sort.Direction.ASC, "eventDate");
-        } else if ("VIEWS".equalsIgnoreCase(sortParam)) {
-            return Sort.by(Sort.Direction.DESC, "views");
-        }
-        return Sort.by(Sort.Direction.ASC, "eventDate");
     }
 
     private Specification<Event> buildEventSpecification(SearchEventParams searchEventParams) {
