@@ -1,3 +1,5 @@
+CREATE DATABASE IF NOT EXISTS main_db;
+
 drop table IF EXISTS users CASCADE;
 drop table IF EXISTS location CASCADE;
 drop table IF EXISTS categories CASCADE;
