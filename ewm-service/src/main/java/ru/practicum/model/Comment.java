@@ -14,13 +14,13 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@Entity(name = "comments")
+@Entity
+@Table(name = "comments")
 public class Comment {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id", nullable = false)
-    @JdbcTypeCode(SqlTypes.BIGINT)
     private Long id;
 
     @ManyToOne
@@ -41,5 +41,4 @@ public class Comment {
     @Column(name = "updated")
     @UpdateTimestamp
     private LocalDateTime updated;
-
 }

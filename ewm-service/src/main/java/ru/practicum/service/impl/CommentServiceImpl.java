@@ -103,7 +103,8 @@ public class CommentServiceImpl implements CommentService {
         if (text.isEmpty() || text.isBlank()) {
             return Collections.emptyList();
         }
-        return commentRepository.findByText(text, pageable);
+        //return commentRepository.findByText(text, pageable);
+        return null;
     }
 
     private Comment checkComment(Long id) {

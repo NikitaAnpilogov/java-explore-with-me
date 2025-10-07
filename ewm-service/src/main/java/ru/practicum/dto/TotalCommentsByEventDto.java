@@ -1,15 +1,15 @@
 package ru.practicum.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
-@Getter
-@Setter
+@Data
 @NoArgsConstructor
-@AllArgsConstructor
 public class TotalCommentsByEventDto {
+
+    public TotalCommentsByEventDto(Long eventId, Long count) {
+        this.eventId = eventId;
+        this.totalComments = count;
+    }
 
     private Long eventId;
     private Long totalComments;
