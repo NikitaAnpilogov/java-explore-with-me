@@ -20,5 +20,5 @@ public class UpdateCommentDto {
     @NotNull
     @Size(message = "Допустимый размер комментария от 1 до 2000 символов", min = 1, max = 2000)
     @NotBlank
-    private final String text;
+    private String text;
 }

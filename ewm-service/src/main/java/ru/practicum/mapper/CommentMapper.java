@@ -6,6 +6,7 @@ import org.mapstruct.MappingConstants;
 import org.mapstruct.ReportingPolicy;
 import ru.practicum.dto.CommentDto;
 import ru.practicum.dto.NewCommentDto;
+import ru.practicum.dto.UpdateCommentDto;
 import ru.practicum.model.Comment;
 import ru.practicum.model.Event;
 import ru.practicum.model.User;
@@ -21,4 +22,6 @@ public interface CommentMapper {
     @Mapping(target = "id", ignore = true)
     Comment map(NewCommentDto newCommentDto, Event event, User user);
 
+    @Mapping(source = "text", target = "text")
+    UpdateCommentDto toUpdateCommentDto(Comment comment);
 }

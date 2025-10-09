@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.practicum.dto.CommentDto;
 import ru.practicum.dto.NewCommentDto;
+import ru.practicum.dto.UpdateCommentDto;
 import ru.practicum.exceptions.IncorrectParametersException;
 import ru.practicum.exceptions.NotFoundException;
 import ru.practicum.mapper.CommentMapper;
@@ -36,8 +37,8 @@ public class CommentServiceImpl implements CommentService {
     @Transactional
     @Override
     public CommentDto createComment(Long userId, Long eventId, NewCommentDto newCommentDto) {
-        User user = checkUser(userId);
-        Event event = checkEvent(eventId);
+        User user = getUserByIdOrThrow(userId);
+        Event event = getEventByIdOrThrow(eventId);
         if (!event.getEventStatus().equals(EventStatus.PUBLISHED)) {
             throw new IncorrectParametersException("Добавление комментария невозможно.",
                     "Нельзя комментировать не опубликованное событие.");
@@ -47,82 +48,88 @@ public class CommentServiceImpl implements CommentService {
 
     @Transactional
     @Override
-    public CommentDto updateByUser(Long userId, Long commentId, @Valid NewCommentDto newCommentDto) {
-        User user = checkUser(userId);
-        Comment comment = checkComment(commentId);
-        checkAuthorComment(user, comment);
+    public UpdateCommentDto updateByUser(Long userId, Long commentId, @Valid NewCommentDto newCommentDto) {
+        User user = getUserByIdOrThrow(userId);
+        Comment comment = getCommentByIdOrThrow(commentId);
+        checkUserIsCommentAuthor(user, comment);
         LocalDateTime now = LocalDateTime.now();
         comment.setText(newCommentDto.getText());
         comment.setUpdated(now);
-        return commentMapper.map(commentRepository.save(comment));
+        return commentMapper.toUpdateCommentDto(commentRepository.save(comment));
     }
 
     @Transactional(readOnly = true)
     @Override
     public List<CommentDto> getCommentsByUser(Long userId) {
-        User user = checkUser(userId);
+        User user = getUserByIdOrThrow(userId);
         List<Comment> comments = commentRepository.findByAuthor_Id(user.getId());
         return comments.stream().map(commentMapper::map).collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
     @Override
-    public Comment getCommentByUserIdAndCommentId(Long userId, Long commentId) {
-        checkUser(userId);
-        return commentRepository.findAllByAuthor_IdAndId(userId, commentId).orElseThrow(
-                () -> new NotFoundException("Комментарий не найден.", String.format("Комментарий c id=%d  не найден.", commentId)));
+    public CommentDto getCommentByUserIdAndCommentId(Long userId, Long commentId) {
+        getUserByIdOrThrow(userId);
+        return commentMapper.map(commentRepository.findAllByAuthor_IdAndId(userId, commentId).orElseThrow(
+                () -> new NotFoundException("Комментарий не найден.", String.format("Комментарий c id=%d  не найден.", commentId))));
     }
 
     @Transactional(readOnly = true)
     @Override
-    public List<Comment> getCommentsInEvent(Long eventId, Integer from, Integer size) {
-        Event event = checkEvent(eventId);
+    public List<CommentDto> getCommentsInEvent(Long eventId, Integer from, Integer size) {
+        Event event = getEventByIdOrThrow(eventId);
+        if (!event.getEventStatus().equals(EventStatus.PUBLISHED)) {
+            throw new IncorrectParametersException("Просмотр комментариев невозможен.",
+                    "Нельзя просматривать комментарии неопубликованного события.");
+        }
         PageRequest pageRequest = PageRequest.of(from / size, size);
-        return commentRepository.findAllByEvent_id(event.getId(), pageRequest);
+        return commentRepository.findAllByEvent_id(event.getId(), pageRequest).stream()
+                .map(commentMapper::map)
+                .toList();
     }
 
     @Transactional
     @Override
     public void deleteComment(Long userId, Long commentId) {
-        User user = checkUser(userId);
-        Comment comment = checkComment(commentId);
-        checkAuthorComment(user, comment);
+        User user = getUserByIdOrThrow(userId);
+        Comment comment = getCommentByIdOrThrow(commentId);
+        checkUserIsCommentAuthor(user, comment);
         commentRepository.delete(comment);
     }
 
     @Transactional
     @Override
     public void deleteCommentByAdmin(Long commentId) {
-        commentRepository.delete(checkComment(commentId));
+        commentRepository.delete(getCommentByIdOrThrow(commentId));
     }
 
     @Transactional(readOnly = true)
     @Override
     public List<Comment> getCommentsByText(String text, Integer from, Integer size) {
         Pageable pageable = PageRequest.of(from / size, size);
-        if (text.isEmpty() || text.isBlank()) {
+        if (text.isBlank()) {
             return Collections.emptyList();
         }
         return commentRepository.findByText(text, pageable);
     }
 
-    private Comment checkComment(Long id) {
+    private Comment getCommentByIdOrThrow(Long id) {
         return commentRepository.findById(id).orElseThrow(() -> new NotFoundException("Комментарий не найден.",
                 String.format("Комментарий c id=%d  не найден.", id)));
     }
 
-    private void checkAuthorComment(User user, Comment comment) {
-        if (!comment.getAuthor().equals(user)) {
+    private void checkUserIsCommentAuthor(User user, Comment comment) {
+        if (!comment.getAuthor().getId().equals(user.getId())) {
             throw new IncorrectParametersException("Доступ запрещен.", "Пользователь не является автором комментария");
         }
     }
 
-    private Event checkEvent(Long id) {
+    private Event getEventByIdOrThrow(Long id) {
         return eventRepository.findById(id).orElseThrow(() -> new NotFoundException("Событие не найдено.",
                 String.format("Событие с id=%d  не найдено", id)));
     }
 
-    private User checkUser(Long id) {
+    private User getUserByIdOrThrow(Long id) {
         return userRepository.findById(id).orElseThrow(() -> new NotFoundException("Пользователь не найден.",
                 String.format("Пользователь c id=%d  не найден", id)));
     }

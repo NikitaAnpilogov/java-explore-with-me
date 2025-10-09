@@ -3,6 +3,7 @@ package ru.practicum.service;
 import jakarta.validation.Valid;
 import ru.practicum.dto.CommentDto;
 import ru.practicum.dto.NewCommentDto;
+import ru.practicum.dto.UpdateCommentDto;
 import ru.practicum.model.Comment;
 
 import java.util.List;
@@ -10,13 +11,13 @@ import java.util.List;
 public interface CommentService {
     CommentDto createComment(Long userId, Long eventId, NewCommentDto newCommentDto);
 
-    CommentDto updateByUser(Long userId, Long commentId, @Valid NewCommentDto newCommentDto);
+    UpdateCommentDto updateByUser(Long userId, Long commentId, @Valid NewCommentDto newCommentDto);
 
     List<CommentDto> getCommentsByUser(Long userId);
 
-    Comment getCommentByUserIdAndCommentId(Long userId, Long commentId);
+    CommentDto getCommentByUserIdAndCommentId(Long userId, Long commentId);
 
-    List<Comment> getCommentsInEvent(Long eventId, Integer from, Integer size);
+    List<CommentDto> getCommentsInEvent(Long eventId, Integer from, Integer size);
 
     void deleteComment(Long userId, Long commentId);
 

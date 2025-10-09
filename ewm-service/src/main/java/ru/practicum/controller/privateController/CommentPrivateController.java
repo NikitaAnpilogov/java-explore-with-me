@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import ru.practicum.dto.CommentDto;
 import ru.practicum.dto.NewCommentDto;
+import ru.practicum.dto.UpdateCommentDto;
 import ru.practicum.model.Comment;
 import ru.practicum.service.CommentService;
 
@@ -26,7 +27,7 @@ public class CommentPrivateController {
     }
 
     @GetMapping("/users/{userId}/{commentId}")
-    public Comment getComment(@PathVariable Long userId, @PathVariable Long commentId) {
+    public CommentDto getComment(@PathVariable Long userId, @PathVariable Long commentId) {
         log.info("PRIVATE - GET запрос на получения комментария id = {} пользователем id = {} ", commentId, userId);
         return commentService.getCommentByUserIdAndCommentId(userId, commentId);
     }
@@ -41,8 +42,8 @@ public class CommentPrivateController {
     }
 
     @PatchMapping("/users/{userId}/{commentId}")
-    public CommentDto patchRequestByUser(@PathVariable Long userId, @PathVariable Long commentId,
-                                         @Valid @RequestBody NewCommentDto updateCommentDto) {
+    public UpdateCommentDto patchRequestByUser(@PathVariable Long userId, @PathVariable Long commentId,
+                                               @Valid @RequestBody NewCommentDto updateCommentDto) {
 
         log.info("PATCH запрос на обновление пользователем с userId = {}  комментария с commentId = {} ", userId, commentId);
         return commentService.updateByUser(userId, commentId, updateCommentDto);
