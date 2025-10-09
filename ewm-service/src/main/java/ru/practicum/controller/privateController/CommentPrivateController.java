@@ -8,7 +8,6 @@ import org.springframework.web.bind.annotation.*;
 import ru.practicum.dto.CommentDto;
 import ru.practicum.dto.NewCommentDto;
 import ru.practicum.dto.UpdateCommentDto;
-import ru.practicum.model.Comment;
 import ru.practicum.service.CommentService;
 
 import java.util.List;
