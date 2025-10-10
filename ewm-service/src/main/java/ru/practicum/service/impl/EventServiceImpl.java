@@ -2,6 +2,8 @@ package ru.practicum.service.impl;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -314,7 +316,6 @@ public class EventServiceImpl implements EventService {
         List<Event> resultEvents = eventRepository.findAll(specification, pageable).getContent();
 
         Map<Long, Long> viewStatsMap = getViewsAllEvents(resultEvents);
-
         Map<Long, List<Request>> confirmedRequestsMap = getConfirmedRequestsCount(resultEvents);
 
         List<EventShortDto> result = resultEvents
@@ -326,8 +327,8 @@ public class EventServiceImpl implements EventService {
                     return dto;
                 }).collect(Collectors.toList());
 
-        if ("VIEWS".equalsIgnoreCase(searchEventParams.getSort())) {
-            result.sort((e1, e2) -> Long.compare(e2.getViews(), e1.getViews())); // DESC порядок
+        if (searchEventParams.getSort() != null && "VIEWS".equalsIgnoreCase(searchEventParams.getSort())) {
+            result.sort((e1, e2) -> Long.compare(e2.getViews(), e1.getViews()));
         }
 
         return result;
@@ -337,9 +338,16 @@ public class EventServiceImpl implements EventService {
         int from = searchEventParams.getFrom() != null ? searchEventParams.getFrom() : 0;
         int size = searchEventParams.getSize() != null ? searchEventParams.getSize() : 10;
 
-        if (searchEventParams.getSort() != null && "EVENT_DATE".equalsIgnoreCase(searchEventParams.getSort())) {
-            Sort sort = Sort.by(Sort.Direction.ASC, "eventDate");
-            return PageRequest.of(from / size, size, sort);
+        if (searchEventParams.getSort() != null) {
+            switch (searchEventParams.getSort().toUpperCase()) {
+                case "EVENT_DATE":
+                    Sort sortByEventDate = Sort.by(Sort.Direction.ASC, "eventDate");
+                    return PageRequest.of(from / size, size, sortByEventDate);
+                case "VIEWS":
+                    return PageRequest.of(from / size, size);
+                default:
+                    return PageRequest.of(from / size, size);
+            }
         }
 
         return PageRequest.of(from / size, size);
@@ -381,14 +389,27 @@ public class EventServiceImpl implements EventService {
         }
 
         if (searchEventParams.getOnlyAvailable() != null && searchEventParams.getOnlyAvailable()) {
-            specification = specification.and((root, query, criteriaBuilder) ->
-                    criteriaBuilder.or(
-                            criteriaBuilder.equal(root.get("participantLimit"), 0),
-                            criteriaBuilder.greaterThan(
-                                    root.get("participantLimit"),
-                                    root.get("confirmedRequests")
-                            )
-                    ));
+            specification = specification.and((root, query, criteriaBuilder) -> {
+                // Создаем подзапрос для подсчета подтвержденных заявок
+                Subquery<Long> confirmedRequestsSubquery = query.subquery(Long.class);
+                Root<Request> requestRoot = confirmedRequestsSubquery.from(Request.class);
+
+                confirmedRequestsSubquery.select(criteriaBuilder.count(requestRoot));
+                confirmedRequestsSubquery.where(
+                        criteriaBuilder.and(
+                                criteriaBuilder.equal(requestRoot.get("event").get("id"), root.get("id")),
+                                criteriaBuilder.equal(requestRoot.get("status"), RequestStatus.CONFIRMED)
+                        )
+                );
+
+                return criteriaBuilder.or(
+                        criteriaBuilder.equal(root.get("participantLimit"), 0),
+                        criteriaBuilder.greaterThan(
+                                root.get("participantLimit"),
+                                confirmedRequestsSubquery
+                        )
+                );
+            });
         }
 
         specification = specification.and((root, query, criteriaBuilder) ->
